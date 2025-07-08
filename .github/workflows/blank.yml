@@ -1,0 +1,51 @@
+name: Process and Build Project
+
+on:
+  push:
+    paths:
+      - '*.zip'
+
+jobs:
+  process-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Find uploaded zip file
+        id: find-zip
+        run: |
+          ZIP_FILE=$(ls *.zip | head -n 1)
+          echo "zip_file=${ZIP_FILE}" >> $GITHUB_OUTPUT
+          echo "base_name=${ZIP_FILE%.zip}" >> $GITHUB_OUTPUT
+          
+      - name: Unzip the project
+        run: |
+          unzip ${{ steps.find-zip.outputs.zip_file }} -d project-folder
+          
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Install project dependencies
+        working-directory: ./project-folder
+        run: |
+          npm install
+          npm install react react-dom typescript @types/react @types/react-dom
+          npm install tailwindcss postcss autoprefixer
+          
+      - name: Build project
+        working-directory: ./project-folder
+        run: npm run build
+        
+      - name: Zip the built files
+        run: |
+          cd project-folder/build
+          zip -r ../../${{ steps.find-zip.outputs.base_name }}-Finish.zip .
+          
+      - name: Upload result to repository
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.find-zip.outputs.base_name }}-Finish.zip
+          path: ${{ steps.find-zip.outputs.base_name }}-Finish.zip
