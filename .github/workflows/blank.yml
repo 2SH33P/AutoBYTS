@@ -45,14 +45,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
           
       - name: Install dependencies
         working-directory: ./project-folder
         run: |
           set -e
           echo "Installing dependencies..."
-          npm ci --no-audit --progress=false
+          npm install --no-audit --progress=false
+          npm install react react-dom typescript @types/react @types/react-dom
+          npm install tailwindcss postcss autoprefixer
           echo "Dependency tree:"
           npm list --depth=0
           
