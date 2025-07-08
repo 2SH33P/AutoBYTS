@@ -1,51 +1,82 @@
 name: Process and Build Project
 
 on:
-  push:
-    paths:
-      - '*.zip'
+  workflow_dispatch:
+    inputs:
+      zip_file:
+        description: "Name of the zip file to process (e.g., 'my-project.zip')"
+        required: true
+        default: ""
 
 jobs:
   process-and-build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         
-      - name: Find uploaded zip file
-        id: find-zip
+      - name: Validate zip file
+        id: validate-zip
         run: |
-          ZIP_FILE=$(ls *.zip | head -n 1)
+          set -e
+          ZIP_FILE="${{ github.event.inputs.zip_file }}"
+          if [ -z "$ZIP_FILE" ]; then
+            echo "Error: No zip file specified!"
+            exit 1
+          fi
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "Error: Zip file '$ZIP_FILE' not found!"
+            exit 1
+          fi
           echo "zip_file=${ZIP_FILE}" >> $GITHUB_OUTPUT
           echo "base_name=${ZIP_FILE%.zip}" >> $GITHUB_OUTPUT
+          echo "Found zip file: ${ZIP_FILE}"
           
       - name: Unzip the project
         run: |
-          unzip ${{ steps.find-zip.outputs.zip_file }} -d project-folder
+          set -e
+          echo "Unzipping ${{ steps.validate-zip.outputs.zip_file }}..."
+          unzip -q ${{ steps.validate-zip.outputs.zip_file }} -d project-folder
+          echo "Unzip completed. Contents:"
+          ls -la project-folder/
           
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
           
-      - name: Install project dependencies
+      - name: Install dependencies
         working-directory: ./project-folder
         run: |
-          npm install
-          npm install react react-dom typescript @types/react @types/react-dom
-          npm install tailwindcss postcss autoprefixer
+          set -e
+          echo "Installing dependencies..."
+          npm ci --no-audit --progress=false
+          echo "Dependency tree:"
+          npm list --depth=0
           
       - name: Build project
         working-directory: ./project-folder
-        run: npm run build
-        
+        run: |
+          set -e
+          echo "Building project..."
+          npm run build --if-present
+          echo "Build output:"
+          ls -la build/
+          
       - name: Zip the built files
         run: |
+          set -e
+          echo "Creating output zip..."
           cd project-folder/build
-          zip -r ../../${{ steps.find-zip.outputs.base_name }}-Finish.zip .
+          zip -r ../../${{ steps.validate-zip.outputs.base_name }}-Finish.zip .
+          echo "Created zip file:"
+          ls -lh ../${{ steps.validate-zip.outputs.base_name }}-Finish.zip
           
-      - name: Upload result to repository
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ steps.find-zip.outputs.base_name }}-Finish.zip
-          path: ${{ steps.find-zip.outputs.base_name }}-Finish.zip
+          name: ${{ steps.validate-zip.outputs.base_name }}-Finish.zip
+          path: ${{ steps.validate-zip.outputs.base_name }}-Finish.zip
+          retention-days: 1
